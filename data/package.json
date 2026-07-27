@@ -1,0 +1,19 @@
+{
+  "name": "today-menu-data",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "format": "prisma format --config prisma.config.ts",
+    "validate": "prisma validate --config prisma.config.ts",
+    "generate": "prisma generate --config prisma.config.ts",
+    "migrate:deploy": "prisma migrate deploy --config prisma.config.ts",
+    "migrate:status": "prisma migrate status --config prisma.config.ts",
+    "verify:sql": "node scripts/verify-sql.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.4.3",
+    "dotenv": "^17.0.0",
+    "prisma": "^7.0.0"
+  }
+}
