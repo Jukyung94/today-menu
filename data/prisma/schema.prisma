@@ -1,0 +1,258 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/client"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ActorKind {
+  GUEST
+  REGISTERED
+
+  @@map("actor_kind")
+}
+
+enum RecommendationMode {
+  GUIDED
+  PERSONALIZED_RANDOM
+
+  @@map("recommendation_mode")
+}
+
+enum RecommendationSessionStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+  EXPIRED
+
+  @@map("recommendation_session_status")
+}
+
+enum FoodAttributeDimension {
+  MEAL_FORM
+  TASTE
+  SITUATION
+  BUDGET
+  FEATURE
+
+  @@map("food_attribute_dimension")
+}
+
+enum FeedbackActionType {
+  VIEWED
+  SELECTED
+  SAVED
+  DISLIKED
+  DO_NOT_RECOMMEND
+
+  @@map("feedback_action_type")
+}
+
+enum MealLogSource {
+  MANUAL
+  RECOMMENDATION
+
+  @@map("meal_log_source")
+}
+
+enum UploadStatus {
+  PENDING
+  READY
+  FAILED
+  DELETED
+
+  @@map("upload_status")
+}
+
+model Actor {
+  id            String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  kind          ActorKind                @default(GUEST)
+  authProvider  String?                  @map("auth_provider") @db.VarChar(50)
+  authSubject   String?                  @map("auth_subject") @db.VarChar(255)
+  locale        String                   @default("ko-KR") @db.VarChar(35)
+  createdAt     DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  lastSeenAt    DateTime                 @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  deletedAt     DateTime?                @map("deleted_at") @db.Timestamptz(3)
+  sessions      RecommendationSession[]
+  feedback      RecommendationFeedback[]
+  mealLogs      MealLog[]
+  uploadedFiles UploadedFile[]
+
+  @@unique([authProvider, authSubject], map: "actors_auth_identity_key")
+  @@map("actors")
+}
+
+model RecommendationSession {
+  id             String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actorId        String                      @map("actor_id") @db.Uuid
+  mode           RecommendationMode
+  status         RecommendationSessionStatus @default(IN_PROGRESS)
+  version        Int                         @default(1)
+  locale         String                      @default("ko-KR") @db.VarChar(35)
+  context        Json                        @db.JsonB
+  rulesetVersion String?                     @map("ruleset_version") @db.VarChar(50)
+  createdAt      DateTime                    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime                    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  expiresAt      DateTime                    @map("expires_at") @db.Timestamptz(3)
+  completedAt    DateTime?                   @map("completed_at") @db.Timestamptz(3)
+  actor          Actor                       @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  answers        SessionAnswer[]
+  results        RecommendationResult[]
+
+  @@index([actorId, createdAt(sort: Desc)], map: "recommendation_sessions_actor_created_idx")
+  @@index([status, expiresAt], map: "recommendation_sessions_status_expires_idx")
+  @@map("recommendation_sessions")
+}
+
+model SessionAnswer {
+  id             String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionId      String                @map("session_id") @db.Uuid
+  questionKey    String                @map("question_key") @db.VarChar(100)
+  selectedValues Json                  @map("selected_values") @db.JsonB
+  sessionVersion Int                   @map("session_version")
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  session        RecommendationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, questionKey], map: "session_answers_session_question_key")
+  @@index([sessionId, sessionVersion], map: "session_answers_session_version_idx")
+  @@map("session_answers")
+}
+
+model Food {
+  id             String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug           String                 @unique @db.VarChar(100)
+  name           String                 @db.VarChar(120)
+  category       String                 @db.VarChar(50)
+  description    String?
+  imageUrl       String?                @map("image_url") @db.VarChar(2048)
+  estimatedPrice Int?                   @map("estimated_price")
+  isActive       Boolean                @default(true) @map("is_active")
+  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  attributes     FoodAttribute[]
+  results        RecommendationResult[]
+  mealLogs       MealLog[]
+
+  @@index([category, isActive], map: "foods_category_active_idx")
+  @@map("foods")
+}
+
+model FoodAttribute {
+  id        String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  foodId    String                 @map("food_id") @db.Uuid
+  dimension FoodAttributeDimension
+  value     String                 @db.VarChar(80)
+  weight    Decimal                @default(1) @db.Decimal(5, 2)
+  createdAt DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  food      Food                   @relation(fields: [foodId], references: [id], onDelete: Cascade)
+
+  @@unique([foodId, dimension, value], map: "food_attributes_food_dimension_value")
+  @@index([dimension, value, foodId], map: "food_attributes_dimension_value_food_idx")
+  @@map("food_attributes")
+}
+
+model RecommendationResult {
+  id              String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionId       String                   @map("session_id") @db.Uuid
+  foodId          String                   @map("food_id") @db.Uuid
+  rank            Int                      @db.SmallInt
+  reason          String
+  matchedTags     Json                     @map("matched_tags") @db.JsonB
+  estimatedPrice  Int?                     @map("estimated_price")
+  matchScore      Decimal                  @map("match_score") @db.Decimal(5, 2)
+  scoreBreakdown  Json                     @map("score_breakdown") @db.JsonB
+  contextSnapshot Json                     @map("context_snapshot") @db.JsonB
+  foodSnapshot    Json                     @map("food_snapshot") @db.JsonB
+  rulesetVersion  String                   @map("ruleset_version") @db.VarChar(50)
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  session         RecommendationSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  food            Food                     @relation(fields: [foodId], references: [id], onDelete: Restrict)
+  feedback        RecommendationFeedback[]
+  mealLogs        MealLog[]
+
+  @@unique([sessionId, rank], map: "recommendation_results_session_rank")
+  @@unique([sessionId, foodId], map: "recommendation_results_session_food")
+  @@unique([id, sessionId], map: "recommendation_results_id_session")
+  @@index([foodId, createdAt(sort: Desc)], map: "recommendation_results_food_created_idx")
+  @@map("recommendation_results")
+}
+
+model RecommendationFeedback {
+  id                     String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actorId                String               @map("actor_id") @db.Uuid
+  sessionId              String               @map("session_id") @db.Uuid
+  recommendationResultId String               @map("recommendation_result_id") @db.Uuid
+  actionType             FeedbackActionType   @map("action_type")
+  rating                 Int?                 @db.SmallInt
+  createdAt              DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  actor                  Actor                @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  recommendationResult   RecommendationResult @relation(fields: [recommendationResultId, sessionId], references: [id, sessionId], onDelete: Cascade, map: "recommendation_feedback_result_session_fkey")
+
+  @@index([recommendationResultId, createdAt], map: "recommendation_feedback_result_created_idx")
+  @@index([actorId, createdAt(sort: Desc)], map: "recommendation_feedback_actor_created_idx")
+  @@map("recommendation_feedback")
+}
+
+model MealLog {
+  id                     String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actorId                String                @map("actor_id") @db.Uuid
+  recommendationResultId String?               @map("recommendation_result_id") @db.Uuid
+  foodId                 String?               @map("food_id") @db.Uuid
+  customFoodName         String?               @map("custom_food_name") @db.VarChar(120)
+  source                 MealLogSource         @default(MANUAL)
+  rating                 Int                   @db.SmallInt
+  note                   String?
+  eatenAt                DateTime              @default(now()) @map("eaten_at") @db.Timestamptz(3)
+  createdAt              DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  actor                  Actor                 @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  recommendationResult   RecommendationResult? @relation(fields: [recommendationResultId], references: [id], onDelete: Restrict)
+  food                   Food?                 @relation(fields: [foodId], references: [id], onDelete: Restrict)
+  photos                 MealLogPhoto[]
+
+  @@index([actorId, eatenAt(sort: Desc)], map: "meal_logs_actor_eaten_idx")
+  @@index([recommendationResultId], map: "meal_logs_recommendation_result_idx")
+  @@map("meal_logs")
+}
+
+model MealLogPhoto {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  mealLogId      String       @map("meal_log_id") @db.Uuid
+  uploadedFileId String       @map("uploaded_file_id") @db.Uuid
+  sortOrder      Int          @default(0) @map("sort_order") @db.SmallInt
+  caption        String?      @db.VarChar(300)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  mealLog        MealLog      @relation(fields: [mealLogId], references: [id], onDelete: Cascade)
+  uploadedFile   UploadedFile @relation(fields: [uploadedFileId], references: [id], onDelete: Restrict)
+
+  @@unique([mealLogId, uploadedFileId], map: "meal_log_photos_meal_file")
+  @@unique([mealLogId, sortOrder], map: "meal_log_photos_meal_sort_order")
+  @@map("meal_log_photos")
+}
+
+model UploadedFile {
+  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actorId         String         @map("actor_id") @db.Uuid
+  storageProvider String         @map("storage_provider") @db.VarChar(50)
+  bucket          String         @db.VarChar(100)
+  objectKey       String         @map("object_key") @db.VarChar(1024)
+  originalName    String?        @map("original_name") @db.VarChar(255)
+  contentType     String         @map("content_type") @db.VarChar(127)
+  byteSize        BigInt         @map("byte_size")
+  checksumSha256  String?        @map("checksum_sha256") @db.Char(64)
+  status          UploadStatus   @default(PENDING)
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  readyAt         DateTime?      @map("ready_at") @db.Timestamptz(3)
+  actor           Actor          @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  mealLogPhotos   MealLogPhoto[]
+
+  @@unique([storageProvider, bucket, objectKey], map: "uploaded_files_storage_object_key")
+  @@index([actorId, createdAt(sort: Desc)], map: "uploaded_files_actor_created_idx")
+  @@map("uploaded_files")
+}
