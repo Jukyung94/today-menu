@@ -3,5 +3,13 @@ dist/
 .env
 .env.local
 .DS_Store
-/src/
 .vite/
+/docs/API_SPEC.md
+/.legacy/
+
+# React Native
+/mobile/android/.gradle/
+/mobile/android/app/build/
+/mobile/ios/Pods/
+/mobile/ios/build/
+/mobile/.bundle/

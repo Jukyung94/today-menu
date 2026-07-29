@@ -1,0 +1,16 @@
+{
+  "name": "today-menu",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev:web": "npm --prefix web run dev",
+    "build:web": "npm --prefix web run build",
+    "lint:web": "npm --prefix web run lint",
+    "dev:backend": "npm --prefix backend run dev",
+    "build:backend": "npm --prefix backend run build",
+    "start:backend": "npm --prefix backend run start",
+    "start:mobile": "npm --prefix mobile run start",
+    "android": "npm --prefix mobile run android",
+    "ios": "npm --prefix mobile run ios"
+  }
+}
